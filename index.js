@@ -1,10 +1,10 @@
 import 'dotenv/config'
-import express from 'express';
+import express, { text } from 'express';
 import cors from 'cors';
 import axios from 'axios'; 
 import chalk from 'chalk';
 import joi from 'joi';
-import { MongoClient } from "mongodb";
+import { MongoClient,ObjectId } from "mongodb";
 import dayjs from"dayjs";
 
 
@@ -49,7 +49,7 @@ app.post('/participants',async (req, res) => {
             to: 'Todos', 
             text: 'entra na sala...', 
             type: 'status', 
-            time: dayjs().format('HH:MM:SS')
+            time: dayjs().format('HH:mm:SS')
         });
         
         res.sendStatus(201); 
@@ -131,12 +131,15 @@ app.get("/messages",async (req,res) =>{
 });
 app.post("/status", async (req,res) =>{
     const {user} = req.headers;
+    
     try{
+        
         const participants =await db.collection("participants").find({name:user});
+       
         if(!participants){
             return res.sendStatus(404);
         }
-        await db.collection(participants).updateOne({name:user},{$set:{lastStatus: Date.now()}});
+        await db.collection("participants").updateOne({name:user},{$set:{lastStatus: Date.now()}});
         res.sendStatus(200);
     }catch(e){
         console.log('erro em atualizar status')
@@ -166,6 +169,51 @@ setInterval(async () =>{
         return res.sendStatus(500)
     }
 },tempo);
+app.delete("/messages/:id", async (req,res) =>{
+    const id =req.params.id
+    const {user} = req.headers;
+    try{
+    const mg =await db.collection("messages").find({_id:new ObjectId(id)}).toArray();
+    if(!mg){
+        console.log('_-')
+        return  res.sendStatus(404)
+    } 
+    if(user !=mg[0].from){
+        console.log(user+' + '+mg[0].from)
+        return  res.sendStatus(401)
+    }
+    const mensagem = await db.collection("messages");
+    await mensagem.deleteOne({ _id: new ObjectId(id) })
+}catch(e){
+    console.log('erro em apagar mensagem!')
+    return res.sendStatus(500)
+}
+});
+app.put("/messages/:id", async (req,res) =>{
+    const bod = req.body;
+    const {user} = req.headers;
+    const id =req.params.id
+    try{
+    const mg =await db.collection("messages").find({_id:new ObjectId(id)}).toArray();
+    if(!mg){
+        console.log('_-')
+        return  res.sendStatus(404)
+    }
+    if(user !=mg[0].from){
+       console.log(user+' + '+mg[0].from)
+       return  res.sendStatus(401)
+    }
+    const mensagem = await db.collection("messages");
+    await  mensagem.updateOne({ 
+        _id: new ObjectId(id) 
+    }, { $set: { text: bod.text,
+        time:dayjs().format('HH:mm:SS')} })
+    }catch(e){
+        console.log('erro em atualizar mensagem!')
+        return res.sendStatus(500)
+    }
+
+});
 
 app.listen(process.env.porta,() =>{
     console.log(chalk.bold.green('O servidor está em pé na porta :'+process.env.porta))
